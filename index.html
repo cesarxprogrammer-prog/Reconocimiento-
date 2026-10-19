@@ -2,41 +2,65 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>Seguimiento del dedo índice</title>
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>Control con la mano</title>
 
   <style>
+
     * {
       box-sizing: border-box;
     }
 
     body {
       margin: 0;
-      background: #111;
-      color: white;
-      font-family: Arial, sans-serif;
       overflow: hidden;
+      background: #111;
+      font-family: Arial, sans-serif;
     }
 
+    /* Video de la cámara */
     #video {
       position: fixed;
+
       width: 100vw;
       height: 100vh;
+
       object-fit: cover;
 
-      /* Efecto espejo */
       transform: scaleX(-1);
     }
 
+    /* Canvas donde dibujamos la mano */
+    #canvas {
+      position: fixed;
+
+      width: 100vw;
+      height: 100vh;
+
+      top: 0;
+      left: 0;
+
+      transform: scaleX(-1);
+
+      pointer-events: none;
+    }
+
+    /* Cursor que sigue al índice */
     #cursor {
       position: fixed;
 
-      width: 35px;
-      height: 35px;
+      width: 40px;
+      height: 40px;
 
       background: red;
-      border: 3px solid white;
+
+      border: 4px solid white;
+
       border-radius: 50%;
 
       transform: translate(-50%, -50%);
@@ -45,124 +69,294 @@
 
       display: none;
 
-      z-index: 10;
+      z-index: 100;
     }
 
+    /* Panel de información */
     #estado {
       position: fixed;
+
       top: 20px;
       left: 20px;
 
-      background: rgba(0,0,0,.7);
-      padding: 12px 18px;
-      border-radius: 10px;
+      padding: 15px 20px;
 
-      z-index: 20;
+      background: rgba(0, 0, 0, 0.75);
+
+      color: white;
+
+      border-radius: 12px;
+
+      font-size: 18px;
+
+      z-index: 200;
     }
+
+    #titulo {
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+
   </style>
+
 </head>
 
 <body>
 
-  <video id="video" autoplay playsinline></video>
+  <!-- Cámara -->
+  <video
+    id="video"
+    autoplay
+    playsinline
+    muted>
+  </video>
 
+
+  <!-- Dibujo de la mano -->
+  <canvas id="canvas"></canvas>
+
+
+  <!-- Cursor -->
   <div id="cursor"></div>
 
+
+  <!-- Estado -->
   <div id="estado">
-    Buscando mano...
+
+    <div id="titulo">
+      🖐️ Reconocimiento de mano
+    </div>
+
+    <div id="mensaje">
+      Iniciando cámara...
+    </div>
+
   </div>
 
 
-  <!-- MediaPipe Hands -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <!-- ============================ -->
+  <!-- LIBRERÍAS MEDIAPIPE -->
+  <!-- ============================ -->
 
-  <!-- Utilidad para manejar la cámara -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js">
+  </script>
+
+  <script
+    src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js">
+  </script>
+
+  <script
+    src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js">
+  </script>
 
 
   <script>
 
-    const video = document.getElementById("video");
-    const cursor = document.getElementById("cursor");
-    const estado = document.getElementById("estado");
+    // =============================
+    // ELEMENTOS
+    // =============================
+
+    const video =
+      document.getElementById("video");
+
+    const canvas =
+      document.getElementById("canvas");
+
+    const ctx =
+      canvas.getContext("2d");
+
+    const cursor =
+      document.getElementById("cursor");
+
+    const mensaje =
+      document.getElementById("mensaje");
 
 
-    // Crear detector de manos
+    // =============================
+    // CONFIGURAR MEDIAPIPE
+    // =============================
+
     const hands = new Hands({
 
       locateFile: (file) => {
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+
+        return (
+          "https://cdn.jsdelivr.net/npm/@mediapipe/hands/" +
+          file
+        );
+
       }
 
     });
 
 
-    // Configuración
     hands.setOptions({
 
+      // Solo una mano
       maxNumHands: 1,
 
+      // Complejidad del modelo
       modelComplexity: 1,
 
+      // Confianza mínima para detectar
       minDetectionConfidence: 0.6,
 
+      // Confianza mínima para seguimiento
       minTrackingConfidence: 0.6
 
     });
 
 
-    // Cuando MediaPipe detecta una mano
+    // =============================
+    // RESULTADOS
+    // =============================
+
     hands.onResults((results) => {
 
+      // Ajustar canvas
+      canvas.width =
+        video.videoWidth || window.innerWidth;
+
+      canvas.height =
+        video.videoHeight || window.innerHeight;
+
+
+      // Limpiar dibujo anterior
+      ctx.clearRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+
+
+      // ¿Hay una mano?
       if (
         results.multiHandLandmarks &&
         results.multiHandLandmarks.length > 0
       ) {
 
-        const mano = results.multiHandLandmarks[0];
+        mensaje.innerHTML =
+          "✅ MANO DETECTADA";
 
 
-        // Punto número 8:
-        // punta del dedo índice
-        const indice = mano[8];
+        // Obtener primera mano
+        const landmarks =
+          results.multiHandLandmarks[0];
 
+
+        // =============================
+        // DIBUJAR ESQUELETO
+        // =============================
+
+        drawConnectors(
+
+          ctx,
+
+          landmarks,
+
+          HAND_CONNECTIONS,
+
+          {
+            color: "#00FF00",
+            lineWidth: 4
+          }
+
+        );
+
+
+        // =============================
+        // DIBUJAR LOS 21 PUNTOS
+        // =============================
+
+        drawLandmarks(
+
+          ctx,
+
+          landmarks,
+
+          {
+            color: "#FF0000",
+            lineWidth: 2,
+            radius: 4
+          }
+
+        );
+
+
+        // =============================
+        // PUNTA DEL ÍNDICE
+        // =============================
 
         /*
-          MediaPipe devuelve coordenadas entre 0 y 1.
+          MediaPipe detecta 21 puntos.
 
-          indice.x
-          indice.y
-
-          Las convertimos al tamaño de la pantalla.
+          El número 8 corresponde
+          a la punta del dedo índice.
         */
 
-
-        // Invertimos X porque la cámara está en espejo
-        const x = (1 - indice.x) * window.innerWidth;
-
-        const y = indice.y * window.innerHeight;
+        const indice =
+          landmarks[8];
 
 
-        // Mover cursor
-        cursor.style.left = x + "px";
+        // =============================
+        // CONVERTIR POSICIÓN
+        // =============================
 
-        cursor.style.top = y + "px";
+        /*
+          MediaPipe devuelve:
 
-        cursor.style.display = "block";
+          X = 0 hasta 1
+          Y = 0 hasta 1
+
+          Lo convertimos al tamaño
+          de la pantalla.
+        */
+
+        const x =
+          (1 - indice.x) *
+          window.innerWidth;
+
+        const y =
+          indice.y *
+          window.innerHeight;
 
 
-        estado.innerHTML =
-          "☝️ Índice detectado<br>" +
-          "X: " + Math.round(x) +
-          " Y: " + Math.round(y);
+        // =============================
+        // MOVER CURSOR
+        // =============================
 
-      }
+        cursor.style.left =
+          x + "px";
 
-      else {
+        cursor.style.top =
+          y + "px";
 
-        cursor.style.display = "none";
+        cursor.style.display =
+          "block";
 
-        estado.innerHTML = "Buscando mano...";
+
+        mensaje.innerHTML =
+          "✅ MANO DETECTADA" +
+          "<br>" +
+          "☝️ Siguiendo índice" +
+          "<br>" +
+          "X: " +
+          Math.round(x) +
+          " | Y: " +
+          Math.round(y);
+
+
+      } else {
+
+        // No hay mano
+
+        mensaje.innerHTML =
+          "🔎 Buscando mano...";
+
+        cursor.style.display =
+          "none";
 
       }
 
@@ -170,25 +364,55 @@
 
 
 
-    // Iniciar cámara
-    const camera = new Camera(video, {
+    // =============================
+    // INICIAR CÁMARA
+    // =============================
 
-      onFrame: async () => {
+    const camera =
+      new Camera(
+        video,
+        {
 
-        await hands.send({
-          image: video
-        });
+          onFrame: async () => {
 
-      },
+            await hands.send({
 
-      width: 640,
+              image: video
 
-      height: 480
+            });
 
-    });
+          },
+
+          width: 640,
+
+          height: 480
+
+        }
+      );
 
 
     camera.start();
+
+
+    // =============================
+    // ERROR DE CÁMARA
+    // =============================
+
+    camera.start()
+      .then(() => {
+
+        mensaje.innerHTML =
+          "🔎 Buscando mano...";
+
+      })
+      .catch((error) => {
+
+        console.error(error);
+
+        mensaje.innerHTML =
+          "❌ Error al abrir cámara";
+
+      });
 
   </script>
 
